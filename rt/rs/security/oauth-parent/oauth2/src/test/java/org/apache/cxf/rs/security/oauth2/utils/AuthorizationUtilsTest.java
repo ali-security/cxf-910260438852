@@ -74,4 +74,43 @@ public class AuthorizationUtilsTest extends Assert {
             assertNull(value);
         }
     }
+
+    @Test
+    public void testThrowAuthorizationFailureWithRealm() {
+        try {
+            AuthorizationUtils.throwAuthorizationFailure(Collections.singleton("Basic"), "oauth");
+            fail("WebApplicationException expected");
+        } catch (WebApplicationException ex) {
+            Response r = ex.getResponse();
+            assertEquals(401, r.getStatus());
+            Object value = r.getMetadata().getFirst(HttpHeaders.WWW_AUTHENTICATE);
+            assertNotNull(value);
+            assertEquals("Basic realm=\"oauth\"", value.toString());
+        }
+    }
+
+    @Test
+    public void testThrowAuthorizationFailureWithRealmInvalidCharacters() {
+        String realm = "oauth\r\n\r\n\r\nX-Injected: true";
+        try {
+            AuthorizationUtils.throwAuthorizationFailure(Collections.singleton("Basic"), realm);
+            fail("WebApplicationException expected");
+        } catch (WebApplicationException ex) {
+            Response r = ex.getResponse();
+            assertEquals(401, r.getStatus());
+            Object value = r.getMetadata().getFirst(HttpHeaders.WWW_AUTHENTICATE);
+            assertNotNull(value);
+            String header = value.toString();
+            assertEquals("Basic realm=\"oauth______X-Injected: true\"", header);
+            assertFalse(header.contains("\r"));
+            assertFalse(header.contains("\n"));
+        }
+    }
+
+    @Test
+    public void testStripControlCharacters() {
+        assertEquals("oauth", AuthorizationUtils.stripControlCharacters("oauth"));
+        assertEquals("a\tb_c_d_e", AuthorizationUtils.stripControlCharacters("a\tb\u0000c\u007fd\re"));
+        assertEquals("__X-Injected: true", AuthorizationUtils.stripControlCharacters("\r\nX-Injected: true"));
+    }
 }
